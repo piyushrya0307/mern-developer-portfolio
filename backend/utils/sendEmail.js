@@ -1,31 +1,63 @@
-
-import nodemailer from "nodemailer";
-
 const sendEmail = async ({ to, subject, text }) => {
-  const emailUser = process.env.EMAIL_USER;
-  const emailPassword = process.env.EMAIL_APP_PASSWORD;
+  const apiKey = process.env.BREVO_API_KEY;
+  const senderEmail = process.env.EMAIL_USER;
 
-  if (!emailUser || !emailPassword) {
-    throw new Error("Email service is not configured.");
+  if (!apiKey || !senderEmail) {
+    throw new Error("Brevo email service is not configured.");
   }
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: emailUser,
-      pass: emailPassword,
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+
+    headers: {
+      "api-key": apiKey,
+      "Content-Type": "application/json",
+      Accept: "application/json",
     },
+
+    body: JSON.stringify({
+      sender: {
+        name: "Piyush Kumar",
+        email: senderEmail,
+      },
+
+      to: [
+        {
+          email: to,
+        },
+      ],
+
+      subject,
+      textContent: text,
+
+      replyTo: {
+        email: senderEmail,
+        name: "Piyush Kumar",
+      },
+    }),
+
+    signal: AbortSignal.timeout(15000),
   });
 
-  const info = await transporter.sendMail({
-    from: emailUser,
-    to,
-    subject,
-    text,
-    replyTo: emailUser,
-  });
+  const data = await response.json().catch(() => ({}));
 
-  return info;
+  if (!response.ok) {
+    console.error("Brevo API error:", {
+      status: response.status,
+      code: data.code,
+      message: data.message,
+    });
+
+    throw new Error("Email delivery service rejected the request.");
+  }
+
+  if (!data.messageId) {
+    throw new Error("Brevo did not return an email message ID.");
+  }
+
+  return {
+    messageId: data.messageId,
+  };
 };
 
 export default sendEmail;
